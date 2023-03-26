@@ -15,6 +15,9 @@ pub enum CWebView {} // opaque type, only used in ffi pointers
 type ErasedExternalInvokeFn = extern "C" fn(webview: *mut CWebView, arg: *const c_char);
 type ErasedDispatchFn = extern "C" fn(webview: *mut CWebView, arg: *mut c_void);
 
+#[cfg(all(target_family = "unix", not(target_os = "macos")))]
+pub type ParentType = *mut gtk_sys::GtkWidget;
+
 extern "C" {
     pub fn webview_free(this: *mut CWebView);
     pub fn webview_new(
@@ -31,6 +34,7 @@ extern "C" {
         hide_instead_of_close: c_int,
         external_invoke_cb: Option<ErasedExternalInvokeFn>,
         userdata: *mut c_void,
+        parent: ParentType,
     ) -> *mut CWebView;
     pub fn webview_loop(this: *mut CWebView, blocking: c_int) -> c_int;
     pub fn webview_exit(this: *mut CWebView);

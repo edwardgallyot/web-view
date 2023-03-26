@@ -32,6 +32,7 @@ mod color;
 mod dialog;
 mod error;
 mod escape;
+mod parent;
 
 pub use color::Color;
 pub use dialog::DialogBuilder;
@@ -40,6 +41,7 @@ pub use escape::escape;
 
 use boxfnonce::SendBoxFnOnce;
 use ffi::*;
+use parent::Parent;
 use std::{
     ffi::{CStr, CString},
     marker::PhantomData,
@@ -73,6 +75,7 @@ pub enum Content<T> {
     Url(T),
     Html(T),
 }
+
 
 /// Builder for constructing a [`WebView`] instance.
 ///
@@ -114,6 +117,7 @@ pub struct WebViewBuilder<'a, T: 'a, I, C> {
     pub min_width: i32,
     pub min_height: i32,
     pub hide_instead_of_close: bool,
+    pub parent: Option<Parent>
 }
 
 impl<'a, T: 'a, I, C> Default for WebViewBuilder<'a, T, I, C>
@@ -141,6 +145,7 @@ where
             min_width: 300,
             min_height: 300,
             hide_instead_of_close: false,
+            parent: None
         }
     }
 }
@@ -248,6 +253,12 @@ where
         self
     }
 
+    /// Constructs the webview with a parent window handle
+    pub fn parent(mut self, parent: Parent) -> Self {
+        self.parent = Some(parent);
+        self
+    }
+
     /// Validates provided arguments and returns a new WebView if successful.
     pub fn build(self) -> WVResult<WebView<'a, T>> {
         macro_rules! require_field {
@@ -282,6 +293,7 @@ where
             self.hide_instead_of_close,
             user_data,
             invoke_handler,
+            self.parent
         )
     }
 
@@ -322,7 +334,7 @@ struct UserData<'a, T> {
 #[derive(Debug)]
 pub struct WebView<'a, T: 'a> {
     inner: Option<*mut CWebView>,
-    _phantom: PhantomData<&'a mut T>,
+    _phantom: PhantomData<&'a mut T>
 }
 
 impl<'a, T> WebView<'a, T> {
@@ -341,6 +353,7 @@ impl<'a, T> WebView<'a, T> {
         hide_instead_of_close: bool,
         user_data: T,
         invoke_handler: I,
+        parent: Option<Parent>
     ) -> WVResult<WebView<'a, T>>
     where
         I: FnMut(&mut WebView<T>, &str) -> WVResult + 'a,
@@ -353,13 +366,18 @@ impl<'a, T> WebView<'a, T> {
         });
         let user_data_ptr = Box::into_raw(user_data);
 
+        let parent_ptr = match parent {
+            Some(parent) => parent.inner,
+            None => { let x: ParentType = std::ptr::null_mut(); x },
+        };
+
         unsafe {
             let inner = webview_new(
                 title.as_ptr(),
                 url.as_ptr(),
                 width,
                 height,
-                resizable as _,
+                resizable as _parent,
                 debug as _,
                 frameless as _,
                 visible as _,
@@ -368,6 +386,7 @@ impl<'a, T> WebView<'a, T> {
                 hide_instead_of_close as _,
                 Some(ffi_invoke_handler::<T>),
                 user_data_ptr as _,
+                parent_ptr
             );
 
             if inner.is_null() {
@@ -382,7 +401,7 @@ impl<'a, T> WebView<'a, T> {
     unsafe fn from_ptr(inner: *mut CWebView) -> WebView<'a, T> {
         WebView {
             inner: Some(inner),
-            _phantom: PhantomData,
+            _phantom: PhantomData
         }
     }
 
@@ -424,7 +443,7 @@ impl<'a, T> WebView<'a, T> {
         unsafe { webview_get_window_handle(self.inner.unwrap()) as _ }
     }
 
-    #[deprecated(note = "Please use exit instead")]
+    #[deprecated(note = "PWlease use exit instead")]
     pub fn terminate(&mut self) {
         self.exit();
     }

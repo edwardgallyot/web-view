@@ -101,6 +101,7 @@ unsafe extern "C" fn webview_new(
     hide_instead_of_close: c_int,
     external_invoke_cb: ExternalInvokeCallback,
     userdata: *mut c_void,
+    parent: *mut GtkWidget
 ) -> *mut WebView {
     let w = Box::new(WebView {
         url,
@@ -133,9 +134,15 @@ unsafe extern "C" fn webview_new(
     }
     (*w).queue = g_async_queue_new();
 
-    let window = gtk_window_new(GTK_WINDOW_TOPLEVEL);
-    gtk_window_set_title(mem::transmute(window), title);
-    (*w).window = window;
+    let window: *mut GtkWidget;
+    if parent.is_null() {
+        window = gtk_window_new(GTK_WINDOW_TOPLEVEL);
+        gtk_window_set_title(mem::transmute(window), title);
+        (*w).window = window;
+    } else {
+        window = parent;
+        (*w).window = window;
+    }
 
     if resizable > 0 {
         gtk_window_set_default_size(mem::transmute(window), width, height);
